@@ -1,12 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 
+from UsedBookStore.settings import BASE_DIR, MEDIA_ROOT
+
 UserModel = get_user_model()
 
 
 """
 Models:
-    User
+    Profile
         - user
     Book
         - title
@@ -29,6 +31,8 @@ Models:
         - name
     Author
         - name
+    Publisher
+        - name
 """
 
 
@@ -43,24 +47,37 @@ class Profile(models.Model):
 
 
 class Genre(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name
 
 
 class Author(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Publisher(models.Model):
+    name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name
 
 
 class Book(models.Model):
+    class Meta:
+        unique_together = ('title', 'publisher', 'published_year')
+
     title = models.CharField(max_length=255)
     description = models.TextField()
-    cover = models.ImageField(upload_to='covers/')
-    publisher = models.CharField(max_length=255)
+    cover = models.ImageField(
+        upload_to='covers/',
+        blank=True,
+        null=True,
+    )
     published_year = models.IntegerField()
 
     genres = models.ManyToManyField(
@@ -71,11 +88,34 @@ class Book(models.Model):
         to=Author,
         related_name='books',
     )
+    publisher = models.ForeignKey(
+        to='Publisher',
+        on_delete=models.PROTECT,
+        related_name='books',
+    )
 
-    # instances - field for access to all the instances of the book
+    DEFAULT_COVER_PATH = 'covers/default_cover.jpg'  # Путь к файлу обложки по умолчанию
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self._state.adding:
+            # Если поле cover не установлено, устанавливаем значение по умолчанию
+            if not self.cover:
+                self.cover = self.DEFAULT_COVER_PATH
+            print('Объект создан')
+        else:
+            self.cover = Book.objects.get(pk=self.pk).cover
+            print('Объект обновлен', self.cover)
 
     def __str__(self):
         return self.title
+
+
+class Status(models.TextChoices):
+    IN_STOCK = 'in_stock', 'В наличии'
+    RESERVED = 'reserved', 'Зарезервировано'
+    SOLD = 'sold', 'Продано'
+    LOST = 'lost', 'Потеряно'
 
 
 class BookInstance(models.Model):
@@ -89,6 +129,12 @@ class BookInstance(models.Model):
         on_delete=models.PROTECT,
         related_name='book_instances',
     )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.IN_STOCK,
+    )
     storage_cell = models.CharField(max_length=50, blank=True, null=True)
     purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
     sale_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -98,9 +144,11 @@ class BookInstance(models.Model):
 
 
 class Condition(models.Model):
-    degree_of_wear = models.IntegerField()
+    class Meta:
+        ordering = ['degree_of_wear']
+
+    degree_of_wear = models.IntegerField(unique=True)
     description = models.CharField(max_length=50)
 
     def __str__(self):
-        return self.degree_of_wear
-
+        return f'{self.degree_of_wear} - {self.description}'

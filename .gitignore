@@ -343,3 +343,4 @@ cython_debug/
 
 # local
 local_debug/*
+/UsedBookStore/media/covers/
